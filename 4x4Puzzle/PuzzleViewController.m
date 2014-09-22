@@ -7,19 +7,14 @@
 //
 
 #import "PuzzleViewController.h"
-#import "Puzzle.h"
+
+static const NSUInteger kPuzzleShuffleStepsCount = 88;
+
+@interface PuzzleViewController()
+@property(strong,nonatomic) Puzzle *base;
+@end
 
 @implementation PuzzleViewController
-
-@synthesize baseView;
-@synthesize base;
-
-
-- (void)didReceiveMemoryWarning
-{
-    [super didReceiveMemoryWarning];
-    // Release any cached data, images, etc that aren't in use.
-}
 
 #pragma mark - View lifecycle
 
@@ -27,31 +22,8 @@
 {
     [super viewDidLoad];
     // Do any additional setup after loading the view, typically from a nib.
-    self.base = [[Puzzle alloc] init];
-    [base shuffle:STEPS_COUNT];
-    [self buildBaseView];
-}
-
-- (void)viewDidUnload
-{
-    [super viewDidUnload];
-    // Release any retained subviews of the main view.
-    // e.g. self.myOutlet = nil;
-}
-
-- (void)viewWillAppear:(BOOL)animated
-{
-    [super viewWillAppear:animated];
-}
-
-- (void)viewWillDisappear:(BOOL)animated
-{
-	[super viewWillDisappear:animated];
-}
-
-- (void)viewDidDisappear:(BOOL)animated
-{
-	[super viewDidDisappear:animated];
+    self.base = [[Puzzle alloc] initWithSize:4];
+    [self newGame:nil];
 }
 
 - (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
@@ -62,32 +34,40 @@
 
 -(IBAction)pieceChosen:(UIButton*)sender
 {
-    const int tag = [sender tag];
-    int row, column;
-    [base getRow:&row Column:&column ForPiece:tag];
-    CGRect buttonFrame = sender.frame;
+    const NSInteger tag = [sender tag];
     
-    if ([base canMovePieceAtRow:row Column:column]) {
-        WAY way = [base movePieceAtRow:row Column:column];
-        switch (way) {
-            case UP:
-                buttonFrame.origin.y = (row-1)*buttonFrame.size.height;
+    PuzzlePoint point = [self.base pointForValue:(PuzzleValue)tag];
+    
+    if ([self.base canMovePieceAtPoint:point]) {
+        
+        CGRect buttonFrame = sender.frame;
+        
+        PuzzleMovementDirection direction = [_base movePieceAtPoint:point];
+        
+        switch (direction) {
+            case PuzzleMovementDirectionUp:
+                buttonFrame = CGRectOffset(buttonFrame, 0, -CGRectGetHeight(buttonFrame));
                 break;
-            case DOWN:
-                buttonFrame.origin.y = (row+1)*buttonFrame.size.height;
+                
+            case PuzzleMovementDirectionDown:
+                buttonFrame = CGRectOffset(buttonFrame, 0, +CGRectGetHeight(buttonFrame));
                 break;
-            case LEFT:
-                buttonFrame.origin.x = (column-1)*buttonFrame.size.width;
+                
+            case PuzzleMovementDirectionLeft:
+                buttonFrame = CGRectOffset(buttonFrame, -CGRectGetWidth(buttonFrame), 0);
                 break;
-            case RIGHT:
-                buttonFrame.origin.x = (column+1)*buttonFrame.size.width;
+
+            case PuzzleMovementDirectionRight:
+                buttonFrame = CGRectOffset(buttonFrame, +CGRectGetWidth(buttonFrame), 0);
                 break;
-            default:
+                
+            case PuzzleMovementDirectionNone:
                 break;
         }
-        [UIView animateWithDuration:0.5 animations:^{sender.frame = buttonFrame;}];
         
-        if ([base isCorrect]) {
+        [UIView animateWithDuration:0.25f animations:^{sender.frame = buttonFrame;}];
+        
+        if ([self.base isCorrect]) {
             [self gameResult];
         }
     }
@@ -105,20 +85,20 @@
 
 -(IBAction)newGame:(id)sender
 {
-    [base shuffle:STEPS_COUNT];
+    [self.base shuffle:kPuzzleShuffleStepsCount];
     [self buildBaseView];
 }
 
 -(void)buildBaseView
 {
-    const CGRect baseBounds = baseView.bounds;
+    const CGRect baseBounds = self.baseView.bounds;
     const CGFloat pieceWidth = baseBounds.size.width / 4.0;
     const CGFloat pieceHeight = baseBounds.size.width / 4.0;
-    for (int row = 0; row < 4; row++) {
-        for (int column = 0; column < 4; column++) {
-            const int piece = [base getPieceAtRow:row Column:column];
+    for (int row = 0; row < [self.base size]; row++) {
+        for (int column = 0; column < [self.base size]; column++) {
+            const int piece = [self.base valueAtPoint:PuzzlePointMake(row, column)];
             if (piece > 0) {
-                __weak UIButton *button = (UIButton *)[baseView viewWithTag:piece];
+                UIButton *button = (UIButton *)[self.baseView viewWithTag:piece];
                 button.frame = CGRectMake(column*pieceWidth, row*pieceHeight, pieceWidth, pieceHeight);
             }
         }

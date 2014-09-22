@@ -8,30 +8,73 @@
 
 #import <Foundation/Foundation.h>
 
-#define STEPS_COUNT 88
+typedef NS_ENUM(NSUInteger, PuzzleMovementDirection)
+{
+    PuzzleMovementDirectionNone,
+    PuzzleMovementDirectionUp,
+    PuzzleMovementDirectionDown,
+    PuzzleMovementDirectionLeft,
+    PuzzleMovementDirectionRight
+};
 
-#define WAY int
-#define EMPTY 100
-#define UP (EMPTY+1)
-#define DOWN (UP+1)
-#define LEFT (DOWN+1)
-#define RIGHT (LEFT+1)
 
-@interface Puzzle: NSObject {
-    int base[4][4];
-}
+#pragma mark - Common
 
--(id)init;
--(void)shuffle:(int)n;
--(int)getPieceAtRow:(int)row Column:(int)column;
--(void)getRow:(int*)row Column:(int*)column ForPiece:(int)piece;
--(BOOL)isCorrect;
+typedef int PuzzleValue;
 
--(BOOL)canMovePieceAtRow:(int)row Column:(int)column;
--(BOOL)canMovePieceUpAtRow:(int)row Column:(int)column;
--(BOOL)canMovePieceDownAtRow:(int)row Column:(int)column;
--(BOOL)canMovePieceLeftAtRow:(int)row Column:(int)column;
--(BOOL)canMovePieceRightAtRow:(int)row Column:(int)column;
--(WAY)movePieceAtRow:(int)row Column:(int)column;
+extern const PuzzleValue kPuzzleValueEmpty;
+
+typedef NSUInteger PuzzleSize;
+
+#pragma mark - Field
+
+typedef PuzzleValue* PuzzleField;
+
+const PuzzleField CreatePuzzleFieldWithSize(const PuzzleSize size);
+void PuzzleFieldRelease(const PuzzleField field);
+
+
+#pragma mark - PuzzlePoint
+
+typedef struct {
+    NSInteger row;
+    NSInteger column;
+} PuzzlePoint;
+
+extern const PuzzlePoint PuzzlePointInvalid;
+
+BOOL PuzzlePointIsValid(const PuzzlePoint point);
+PuzzlePoint PuzzlePointMake(const NSUInteger row, const NSUInteger column);
+
+#pragma mark - PuzzleBase
+
+typedef struct
+{
+    PuzzleField field;
+    PuzzleSize size;
+} * PuzzleBase;
+
+const PuzzleBase CreatePuzzleBaseWithSize(const NSUInteger size);
+void PuzzleBaseRelease(const PuzzleBase puzzle);
+PuzzleSize PuzzleBaseGetSize(const PuzzleBase base);
+
+PuzzleValue PuzzleBaseValueForPoint(const PuzzleBase base, const PuzzlePoint point);
+void PuzzleBaseSetValueForPoint(const PuzzleBase base, const PuzzlePoint point, const PuzzleValue value);
+
+
+
+@interface Puzzle: NSObject
+
+@property (nonatomic, readonly) NSUInteger size;
+
+- (instancetype)initWithSize:(NSUInteger)size NS_DESIGNATED_INITIALIZER;
+
+- (BOOL)canMovePieceAtPoint:(PuzzlePoint)point;
+- (PuzzleMovementDirection)movePieceAtPoint:(PuzzlePoint)point;
+- (PuzzleValue)valueAtPoint:(PuzzlePoint)point;
+- (PuzzlePoint)pointForValue:(PuzzleValue)value;
+
+- (void)shuffle:(int)n;
+- (BOOL)isCorrect;
 
 @end
