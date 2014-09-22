@@ -8,20 +8,151 @@
 
 #import "Puzzle.h"
 
+const PuzzleValue kPuzzleValueEmpty = 0;
+
+const PuzzlePoint PuzzlePointInvalid = {
+    .row = -1,
+    .column = -1
+};
+
+// Private
+NSUInteger PuzzleBaseFieldOffsetForPoint(const PuzzleBase base, const PuzzlePoint point);
+
+
+#pragma mark - PuzzleField Implementation
+
+const PuzzleField CreatePuzzleFieldWithSize(const PuzzleSize size)
+{
+    PuzzleField field = (PuzzleField)malloc(size * size);
+    memset(field, 0, size * size);
+    return field;
+}
+
+void PuzzleFieldRelease(const PuzzleField field)
+{
+    free(field);
+}
+
+#pragma mark - PuzzlePoint Implementation
+
+PuzzlePoint PuzzlePointMake(const NSUInteger row, const NSUInteger column)
+{
+    PuzzlePoint point = {
+        .row = row,
+        .column = column
+    };
+    
+    return point;
+}
+
+BOOL PuzzlePointIsValid(const PuzzlePoint point)
+{
+    return point.row != -1 && point.column != -1;
+}
+
+#pragma mark - PuzzleBase Implementation
+
+const PuzzleBase CreatePuzzleBaseWithSize(const NSUInteger size)
+{
+    PuzzleBase puzzleBase = (PuzzleBase)malloc(size * size);
+    puzzleBase->size = size;
+    puzzleBase->field = CreatePuzzleFieldWithSize(size);
+    return puzzleBase;
+}
+
+void PuzzleBaseRelease(const PuzzleBase puzzle)
+{
+    PuzzleFieldRelease(puzzle->field);
+    free(puzzle);
+}
+
+PuzzleSize PuzzleBaseGetSize(const PuzzleBase base)
+{
+    return base->size;
+}
+
+PuzzleSize PuzzleBaseGetFieldSize(const PuzzleBase base)
+{
+    PuzzleSize baseSize = PuzzleBaseGetSize(base);
+    return baseSize * baseSize;
+}
+
+NSUInteger PuzzleBaseFieldOffsetForPoint(const PuzzleBase base, const PuzzlePoint point)
+{
+    return point.row * base->size + point.column;
+}
+
+PuzzleValue PuzzleBaseValueAtOffset(const PuzzleBase base, const NSUInteger offset)
+{
+    return base->field[offset];
+}
+
+PuzzleValue PuzzleBaseValueForPoint(const PuzzleBase base, const PuzzlePoint point)
+{
+    return PuzzleBaseValueAtOffset(base, PuzzleBaseFieldOffsetForPoint(base, point));
+}
+
+void PuzzleBaseSetValueAtOffset(const PuzzleBase base, const NSUInteger offset, const PuzzleValue value)
+{
+    base->field[offset] = value;
+}
+
+void PuzzleBaseSetValueForPoint(const PuzzleBase base, const PuzzlePoint point, const PuzzleValue value)
+{
+    PuzzleBaseSetValueAtOffset(base, PuzzleBaseFieldOffsetForPoint(base, point), value);
+}
+
+void PuzzleBaseFillWithInitialValues(const PuzzleBase base)
+{
+    for (NSUInteger i=0; i<PuzzleBaseGetFieldSize(base)-1; i++) {
+        PuzzleBaseSetValueAtOffset(base, i, (PuzzleValue)i+1);
+    }
+    
+    PuzzleBaseSetValueAtOffset(base, PuzzleBaseGetFieldSize(base)-1, kPuzzleValueEmpty);
+}
+
+PuzzlePoint PuzzleBasePointForOffset(const PuzzleBase base, const NSUInteger offset)
+{
+    PuzzleSize size = PuzzleBaseGetSize(base);
+    return PuzzlePointMake(offset/size, offset%size);
+}
+
+PuzzlePoint PuzzleBasePointWithValue(const PuzzleBase base, const PuzzleValue value)
+{
+    for (NSUInteger i=0; i<PuzzleBaseGetFieldSize(base); i++) {
+        if (PuzzleBaseValueAtOffset(base, i) == value) {
+            return PuzzleBasePointForOffset(base, i);
+        }
+    }
+    
+    return PuzzlePointInvalid;
+}
+
+
+@interface Puzzle()
+@property (nonatomic) PuzzleBase base;
+@end
+
 @implementation Puzzle
 
-/**
- * We have to initialize a new base grid for puzzle (in correct way order). Only once - when the puzzle is instantiated.
- */
--(id)init
+- (instancetype)initWithSize:(NSUInteger)size
 {
-    if (self = [super init]) {
-        for (int i = 0; i < 4; i++)
-            for (int j = 0; j < 4; j++)
-                base[i][j] = i*4+(j+1);
-        base[3][3] = 0;
+    self = [super init];
+    if (self) {
+        _base = CreatePuzzleBaseWithSize(size);
+        PuzzleBaseFillWithInitialValues(_base);
     }
     return self;
+}
+
+- (void)dealloc
+{
+    PuzzleBaseRelease(_base), _base = NULL;
+}
+
+- (NSUInteger)size
+{
+    return PuzzleBaseGetSize(self.base);
 }
 
 /**
@@ -30,110 +161,109 @@
 -(void)shuffle:(int)n
 {
     for (int i = 0; i < n; i++) {
-        int row, column;
+        PuzzlePoint point;
         do {
-            row = rand() % 4;
-            column = rand() % 4;
-        } while(![self canMovePieceAtRow:row Column:column]);
-        [self movePieceAtRow:row Column:column];
+            point = (PuzzlePoint){
+                .row = arc4random() % [self size],
+                .column = arc4random() % [self size]
+            };
+        } while(![self canMovePieceAtPoint:point]);
+        [self movePieceAtPoint:point];
     }
-}
-
-/**
- * Fetch the piece of puzzle at the given position. (0 is used for the space)
- */
--(int)getPieceAtRow:(int)row Column:(int)column
-{
-    return base[row][column];
-}
-
-/**
- * Important thing to do - to find the position of the given piece.
- */
--(void)getRow:(int*)row Column:(int*)column ForPiece:(int)piece
-{
-    for (int i = 0; i < 4; i++)
-        for (int j = 0; j < 4; j++)
-            if (base[i][j] == piece) {
-                (*row) = i; (*column) = j;
-            }
-                
 }
 
 /**
  * If puzzle is sorted in correct order.
  */
--(BOOL)isCorrect
+- (BOOL)isCorrect
 {
-    for (int i = 0; i < 15; i++) {
-        int row = i / 4;
-        int column = i % 4;
-        if (base[row][column] != ((i+1)%16))
+    const NSUInteger baseSize = PuzzleBaseGetSize(self.base);
+    const NSUInteger piecesMaxIndex = baseSize * baseSize - 1; // last piece must be empty
+    
+    for (NSUInteger i=0; i<piecesMaxIndex; i++) {
+        BOOL isCorrectValue = PuzzleBaseValueAtOffset(self.base, i) == i;
+        if (!isCorrectValue) {
             return NO;
+        }
     }
 
     return YES;
 }
 
-/**
- * If the specified piece can be moved from its position.
- */
--(BOOL)canMovePieceAtRow:(int)row Column:(int)column
+- (PuzzlePoint)convertPoint:(PuzzlePoint)point toDirection:(PuzzleMovementDirection)direction
 {
-    return [self canMovePieceUpAtRow:row Column:column] ||
-        [self canMovePieceDownAtRow:row Column:column] ||
-        [self canMovePieceLeftAtRow:row Column:column] ||
-        [self canMovePieceRightAtRow:row Column:column];
-}
-
-/**
- * If the piece can be moved up into the empty space.
- */
--(BOOL)canMovePieceUpAtRow:(int)row Column:(int)column
-{
-    return row > 0 && base[row-1][column] == 0;
-}
-
--(BOOL)canMovePieceDownAtRow:(int)row Column:(int)column
-{
-    return row < 3 && base[row+1][column] == 0;
-}
-
--(BOOL)canMovePieceLeftAtRow:(int)row Column:(int)column
-{
-    return column > 0 && base[row][column-1] == 0;
-}
-
--(BOOL)canMovePieceRightAtRow:(int)row Column:(int)column
-{
-    return column < 3 && base[row][column+1] == 0;
-}
-
-/**
- * Piece movement into the empty space.
- */
--(WAY)movePieceAtRow:(int)row Column:(int)column
-{
-    int tmp = base[row][column];
-    WAY moved = EMPTY;
-    if ([self canMovePieceUpAtRow:row Column:column]) {
-        base[row][column] = base[row-1][column];
-        base[row-1][column] = tmp;
-        moved = UP;
-    } else if ([self canMovePieceDownAtRow:row Column:column]) {
-        base[row][column] = base[row+1][column];
-        base[row+1][column] = tmp;
-        moved = DOWN;
-    } else if ([self canMovePieceLeftAtRow:row Column:column]) {
-        base[row][column] = base[row][column-1];
-        base[row][column-1] = tmp;
-        moved = LEFT;
-    } else if ([self canMovePieceRightAtRow:row Column:column]) {
-        base[row][column] = base[row][column+1];
-        base[row][column+1] = tmp;
-        moved = RIGHT;
+    switch (direction) {
+        case PuzzleMovementDirectionUp:
+            point.row -= 1;
+            break;
+        case PuzzleMovementDirectionDown:
+            point.row += 1;
+            break;
+        case PuzzleMovementDirectionLeft:
+            point.column -= 1;
+            break;
+        case PuzzleMovementDirectionRight:
+            point.column += 1;
+            break;
+        case PuzzleMovementDirectionNone:
+            break;
     }
-    return moved;
+    
+    return point;
+}
+
+- (BOOL)pointIsValid:(PuzzlePoint)point
+{
+    return point.row >= 0 && point.row < [self size] && point.column >= 0 && point.column < [self size];
+}
+
+- (PuzzleMovementDirection)availableDirectionToMovePoint:(PuzzlePoint)point
+{
+#define CHECK_DIRECTION(DIRECTION)\
+    {\
+        PuzzlePoint convertedPoint = [self convertPoint:point toDirection:DIRECTION];\
+        if ([self pointIsValid:convertedPoint] && [self valueAtPoint:convertedPoint] == kPuzzleValueEmpty) {\
+            return DIRECTION;\
+        }\
+    }
+    
+    CHECK_DIRECTION(PuzzleMovementDirectionUp)
+    CHECK_DIRECTION(PuzzleMovementDirectionDown)
+    CHECK_DIRECTION(PuzzleMovementDirectionLeft)
+    CHECK_DIRECTION(PuzzleMovementDirectionRight)
+    
+#undef CHECK_DIRECTION
+    
+    return PuzzleMovementDirectionNone;
+}
+
+- (BOOL)canMovePieceAtPoint:(PuzzlePoint)point
+{
+    return [self availableDirectionToMovePoint:point] != PuzzleMovementDirectionNone;
+}
+
+- (PuzzleMovementDirection)movePieceAtPoint:(PuzzlePoint)point
+{
+    PuzzleMovementDirection direction = [self availableDirectionToMovePoint:point];
+    
+    if (direction != PuzzleMovementDirectionNone) {
+        PuzzlePoint movementPoint = [self convertPoint:point toDirection:direction];
+        PuzzleValue currentValue = PuzzleBaseValueForPoint(self.base, point);
+        PuzzleBaseSetValueForPoint(self.base, point, kPuzzleValueEmpty);
+        PuzzleBaseSetValueForPoint(self.base, movementPoint, currentValue);
+    }
+    
+    return direction;
+}
+
+- (PuzzleValue)valueAtPoint:(PuzzlePoint)point
+{
+    return PuzzleBaseValueForPoint(self.base, point);
+}
+
+- (PuzzlePoint)pointForValue:(PuzzleValue)value
+{
+    return PuzzleBasePointWithValue(self.base, value);
 }
 
 @end

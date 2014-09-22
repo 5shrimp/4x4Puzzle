@@ -13,7 +13,6 @@
 @interface PuzzleViewController : UIViewController
 
 @property(weak,nonatomic) IBOutlet UIView *baseView;
-@property(strong,nonatomic) Puzzle *base;
 
 -(IBAction)pieceChosen:(UIButton*)sender;
 -(IBAction)newGame:(id)sender;
